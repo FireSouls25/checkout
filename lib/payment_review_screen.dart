@@ -50,6 +50,16 @@ class _PaymentReviewScreenState extends State<PaymentReviewScreen> {
 
     await DatabaseHelper.instance.insertOrder(order.toMap());
 
+    if (widget.saveCard && widget.cardNumber.isNotEmpty) {
+      await DatabaseHelper.instance.insertSavedCard({
+        'cardHolder': widget.cardHolder,
+        'cardNumber': widget.cardNumber,
+        'validUntil': widget.validUntil,
+        'paymentMethod': widget.paymentMethod,
+        'lastUsed': DateTime.now().toIso8601String(),
+      });
+    }
+
     await Future.delayed(const Duration(milliseconds: 800));
 
     if (!mounted) return;

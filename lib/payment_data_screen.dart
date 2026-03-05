@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'payment_review_screen.dart';
+import 'database_helper.dart';
 
 class PaymentDataScreen extends StatefulWidget {
   final double totalPrice;
@@ -19,9 +20,52 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
   final _cvvController = TextEditingController();
   final _cardHolderController = TextEditingController();
 
+  List<Map<String, dynamic>> _savedCards = [];
+  int? _selectedSavedCardId;
+  bool _isLoadingSavedCards = true;
+
   final List<String> _methods = ['PayPal', 'Credit', 'Wallet'];
 
   double get _totalPrice => widget.totalPrice;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCards();
+  }
+
+  Future<void> _loadSavedCards() async {
+    final cards = await DatabaseHelper.instance.getSavedCards();
+    setState(() {
+      _savedCards = cards;
+      _isLoadingSavedCards = false;
+    });
+  }
+
+  Future<void> _deleteSavedCard(int id) async {
+    await DatabaseHelper.instance.deleteSavedCard(id);
+    await _loadSavedCards();
+  }
+
+  void _selectSavedCard(Map<String, dynamic> card) {
+    setState(() {
+      _selectedSavedCardId = card['id'] as int;
+      _cardNumberController.text = card['cardNumber'] as String;
+      _validUntilController.text = card['validUntil'] as String;
+      _cardHolderController.text = card['cardHolder'] as String;
+      _cvvController.text = '';
+    });
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selectedSavedCardId = null;
+      _cardNumberController.clear();
+      _validUntilController.clear();
+      _cvvController.clear();
+      _cardHolderController.clear();
+    });
+  }
 
   @override
   void dispose() {
@@ -54,10 +98,12 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
           cardNumber: _cardNumberController.text.isEmpty
               ? '98'
               : _cardNumberController.text.replaceAll(' ', '').length >= 2
-                  ? _cardNumberController.text
-                      .replaceAll(' ', '')
-                      .substring(_cardNumberController.text.replaceAll(' ', '').length - 2)
-                  : _cardNumberController.text,
+              ? _cardNumberController.text
+                    .replaceAll(' ', '')
+                    .substring(
+                      _cardNumberController.text.replaceAll(' ', '').length - 2,
+                    )
+              : _cardNumberController.text,
           validUntil: _validUntilController.text,
           cvv: _cvvController.text,
           totalPrice: _totalPrice,
@@ -85,6 +131,8 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
                     _buildTotalPrice(),
                     const SizedBox(height: 24),
                     _buildPaymentMethodSelector(),
+                    const SizedBox(height: 24),
+                    _buildSavedCardsSection(),
                     const SizedBox(height: 24),
                     _buildCardFields(),
                     const SizedBox(height: 20),
@@ -123,7 +171,11 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
                   ),
                 ],
               ),
-              child: const Icon(Icons.arrow_back_ios_new, size: 16, color: Color(0xFF1A1A2E)),
+              child: const Icon(
+                Icons.arrow_back_ios_new,
+                size: 16,
+                color: Color(0xFF1A1A2E),
+              ),
             ),
           ),
           const Expanded(
@@ -193,7 +245,10 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
                   margin: EdgeInsets.only(
                     right: method != _methods.last ? 8 : 0,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: isSelected ? const Color(0xFF4D6EF5) : Colors.white,
                     borderRadius: BorderRadius.circular(12),
@@ -213,7 +268,9 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white : const Color(0xFF9098B1),
+                          color: isSelected
+                              ? Colors.white
+                              : const Color(0xFF9098B1),
                         ),
                       ),
                       if (isSelected) ...[
@@ -225,7 +282,11 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
                             color: Colors.white.withOpacity(0.25),
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.check, size: 12, color: Colors.white),
+                          child: const Icon(
+                            Icons.check,
+                            size: 12,
+                            color: Colors.white,
+                          ),
                         ),
                       ],
                     ],
@@ -318,21 +379,145 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
         ],
         decoration: InputDecoration(
           hintText: '•••• •••• •••• ••••',
-          hintStyle: const TextStyle(color: Color(0xFFCDD3E3), fontSize: 16, letterSpacing: 2),
+          hintStyle: const TextStyle(
+            color: Color(0xFFCDD3E3),
+            fontSize: 16,
+            letterSpacing: 2,
+          ),
           prefixIcon: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             child: _MastercardIcon(),
           ),
-          prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 0,
+            minHeight: 0,
+          ),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
           ),
           filled: true,
           fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 16,
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _buildSavedCardsSection() {
+    if (_isLoadingSavedCards) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_savedCards.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Saved Cards',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF1A1A2E),
+          ),
+        ),
+        const SizedBox(height: 12),
+        ..._savedCards.map((card) {
+          final isSelected = _selectedSavedCardId == card['id'];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: GestureDetector(
+              onTap: () => _selectSavedCard(card),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? const Color(0xFF4D6EF5).withOpacity(0.1)
+                      : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF4D6EF5)
+                        : Colors.transparent,
+                    width: 2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(4),
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFEB001B), Color(0xFFF79E1B)],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            card['cardHolder'] ?? 'Card Holder',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected
+                                  ? const Color(0xFF4D6EF5)
+                                  : const Color(0xFF1A1A2E),
+                            ),
+                          ),
+                          Text(
+                            '•••• ${card['cardNumber']}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF9098B1),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Color(0xFF9098B1),
+                        size: 20,
+                      ),
+                      onPressed: () => _deleteSavedCard(card['id']),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: _clearSelection,
+          child: const Text(
+            '+ Add new card',
+            style: TextStyle(
+              color: Color(0xFF4D6EF5),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -375,14 +560,20 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
             inputFormatters: inputFormatters,
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(color: Color(0xFFCDD3E3), fontSize: 14),
+              hintStyle: const TextStyle(
+                color: Color(0xFFCDD3E3),
+                fontSize: 14,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
               ),
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
             ),
           ),
         ),
@@ -423,7 +614,9 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF4D6EF5),
           foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           elevation: 0,
         ),
         child: const Text(
@@ -437,7 +630,10 @@ class _PaymentDataScreenState extends State<PaymentDataScreen> {
 
 class _CardNumberFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final text = newValue.text;
     StringBuffer buffer = StringBuffer();
     for (int i = 0; i < text.length; i++) {
@@ -454,7 +650,10 @@ class _CardNumberFormatter extends TextInputFormatter {
 
 class _MonthYearFormatter extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
     final text = newValue.text;
     if (text.length >= 2) {
       final formatted = '${text.substring(0, 2)}/${text.substring(2)}';
